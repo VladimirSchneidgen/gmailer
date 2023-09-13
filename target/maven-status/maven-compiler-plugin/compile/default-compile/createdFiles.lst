@@ -1,0 +1,6 @@
+com\mailer\mailer\cron\CronRunner.class
+com\mailer\mailer\api\MailService.class
+com\mailer\mailer\api\service\MailServiceImpl.class
+com\mailer\mailer\MailerApplication.class
+com\mailer\mailer\properties\MailProperties.class
+com\mailer\mailer\properties\CredentialProperties.class

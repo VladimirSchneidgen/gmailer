@@ -1,0 +1,7 @@
+email:
+  from: replaceMe@gmail.com
+  to: replaceMe6@gmail.com
+  subject: replaceMe
+
+credentials:
+  path: /replaceMe

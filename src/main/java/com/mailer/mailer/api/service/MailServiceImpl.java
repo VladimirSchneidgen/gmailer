@@ -12,7 +12,7 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.gmail.Gmail;
-import com.google.api.services.gmail.model.Message;
+import com.google.api.services.gmail.model.*;
 import com.mailer.mailer.api.MailService;
 import com.mailer.mailer.properties.CredentialProperties;
 import com.mailer.mailer.properties.MailProperties;
@@ -25,10 +25,9 @@ import javax.mail.Session;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 import java.io.*;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 
-import static com.google.api.services.gmail.GmailScopes.GMAIL_SEND;
+import static com.google.api.services.gmail.GmailScopes.*;
 import static javax.mail.Message.RecipientType.TO;
 
 @Service
@@ -63,7 +62,8 @@ public class MailServiceImpl implements MailService {
 
         // Build flow and trigger user authorization request.
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, Set.of(GMAIL_SEND))
+                HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, Set.of(
+                        GMAIL_SEND, GMAIL_COMPOSE, GMAIL_LABELS, GMAIL_MODIFY, MAIL_GOOGLE_COM))
                 .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(TOKENS_DIRECTORY_PATH)))
                 .setAccessType("offline")
                 .build();
@@ -109,5 +109,79 @@ public class MailServiceImpl implements MailService {
         } catch (GoogleJsonResponseException e) {
             LOG.error("Mail failed to sent, message: {}", e.getDetails());
         }
+    }
+
+    @Override
+    public List<Label> getLabels() throws Exception {
+        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+        Gmail service = new Gmail.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
+                .setApplicationName("mailer")
+                .build();
+
+        return service.users().labels().list("me").execute().getLabels();
+    }
+
+    @Override
+    public void deleteSpam() throws Exception {
+        if (delete("SPAM")) {
+            LOG.info("Spam mails were deleted");
+        } else {
+            LOG.info("There is nothing to delete from spam");
+        }
+    }
+
+    @Override
+    public void deleteSocials() throws Exception {
+        if (delete("CATEGORY_SOCIAL")) {
+            LOG.info("Social mails were deleted");
+        } else {
+            LOG.info("There is nothing to delete from socials");
+        }
+    }
+
+    @Override
+    public void deletePromotions() throws Exception {
+        if (delete("CATEGORY_PROMOTIONS")) {
+            LOG.info("Promotion mails were deleted");
+        } else {
+            LOG.info("There is nothing to delete from promotions");
+        }
+    }
+
+    public boolean delete(String label) throws Exception {
+        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+        Gmail service = new Gmail.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
+                .setApplicationName("mailer")
+                .build();
+
+        ListMessagesResponse messages = service.users().messages().list("me")
+                .setLabelIds(List.of(label))
+                .setIncludeSpamTrash(true)
+                .setMaxResults(500L)
+                .execute();
+
+        if (messages.getMessages() != null) {
+            // arraylist holding message IDs
+            final var idList = new ArrayList<String>();
+            messages.getMessages().forEach(message -> idList.add(message.getId()));
+
+            final var batchDeleteRequest = new BatchDeleteMessagesRequest();
+            batchDeleteRequest.setIds(idList);
+
+            // batch delete all social mails
+            service.users().messages().batchDelete("me", batchDeleteRequest).execute();
+
+            messages = service.users().messages().list("me")
+                    .setLabelIds(List.of(label))
+                    .setIncludeSpamTrash(true)
+                    .setMaxResults(500L)
+                    .execute();
+
+            if (messages.size() > 0) {
+                deleteSpam();
+            }
+            return true;
+        }
+        return false;
     }
 }
